@@ -1,2 +1,2 @@
 # PyProxy
-High speed proxy engine to serve light weight payload
+High speed proxy engine to serve light weight content
