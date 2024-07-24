@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from http import HTTPStatus
 
 import httpx
@@ -8,7 +9,22 @@ from fastapi.routing import APIRoute
 
 from squire import settings
 
+LOGGER = logging.getLogger("uvicorn.error")
 CLIENT = httpx.Client()  # Create re-usable client object
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan function to handle startup and shutdown events."""
+    LOGGER.info(
+        "Tunneling http://%s:%d -> %s with %d workers",
+        settings.proxy_host,
+        settings.proxy_port,
+        settings.client_url,
+        settings.workers,
+    )
+    yield
+    LOGGER.info("Stopped tunneling")
 
 
 async def proxy(request: Request) -> Response:
@@ -44,7 +60,7 @@ async def proxy(request: Request) -> Response:
 
         return Response(content, response.status_code, response.headers, content_type)
     except httpx.RequestError as exc:
-        logging.getLogger("uvicorn.error").error(exc)
+        LOGGER.error(exc)
         raise HTTPException(
             status_code=HTTPStatus.BAD_GATEWAY.value,
             detail=HTTPStatus.BAD_GATEWAY.phrase,
@@ -52,17 +68,23 @@ async def proxy(request: Request) -> Response:
 
 
 if __name__ == "__main__":
-    print(settings.client_ip)
-    print(settings.client_host)
-    exit(0)
+    # todo:
+    #   Include a repeated timer to update the client_url
+    #   Take refresh_interval as an env var and default to 15 minutes
+    #       Do this only if it was constructed by PyProxy
+    #   Include file logger
     uvicorn.run(
         app=FastAPI(
+            host=settings.proxy_host,
+            port=settings.proxy_port,
+            workers=settings.workers,
             routes=[
                 APIRoute(
                     "/{_:path}",
                     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
                     endpoint=proxy,
                 )
-            ]
+            ],
+            lifespan=lifespan,
         )
     )
