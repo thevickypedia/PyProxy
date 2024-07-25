@@ -1,6 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 from http import HTTPStatus
+from urllib.parse import urljoin
 
 import httpx
 import uvicorn
@@ -44,12 +45,11 @@ async def engine(request: Request) -> Response:
     try:
         payload = dict(
             method=request.method,
-            url=settings.client_url + request.url.path,
+            url=urljoin(settings.client_url, request.url.path),
             headers=dict(request.headers),
             cookies=request.cookies,
             params=dict(request.query_params),
             data=await request.body(),
-            follow_redirects=True,
         )
         response = await HANDLER(payload)
         headers = response.headers.copy()
@@ -58,10 +58,13 @@ async def engine(request: Request) -> Response:
             content = response.text
         else:
             content = response.content
-        # headers.pop("host", None)
-        # headers.pop("content-length", None)
-        # headers.pop("accept-encoding", None)
-        # headers.pop("content-encoding", None)
+        for header in settings.remove_headers:
+            LOGGER.debug("Removing header: %s", header)
+            headers.pop(header, None)
+        for header in settings.add_headers:
+            for key, value in header.items():
+                LOGGER.debug("Adding header: %s", key)
+                headers[key] = value
         return Response(content, response.status_code, headers, content_type)
     except httpx.RequestError as exc:
         LOGGER.error(exc)
@@ -74,10 +77,10 @@ async def engine(request: Request) -> Response:
 def run():
     """Server handler."""
     # todo:
-    #   Include a repeated timer to update the client_url
-    #   Take refresh_interval as an env var and default to 15 minutes
-    #       Do this only if it was constructed by PyProxy
+    #   Include rate limit
+    #   Include origin filter
     #   Include file logger
+    settings.client_url = str(settings.client_url)
     app = FastAPI(
         routes=[
             APIRoute(
@@ -91,10 +94,10 @@ def run():
     # noinspection PyTypeChecker
     app.add_middleware(
         CORSMiddleware,
-        allow_origins="*",  # todo: restrict if need be
+        allow_origins=settings.allowed_origins,
         allow_credentials=True,
         allow_methods=settings.allowed_methods,
-        allow_headers="*",  # todo: restrict if need be
+        allow_headers=settings.allowed_headers,
         max_age=300,  # maximum time in seconds for browsers to cache CORS responses
     )
     uvicorn.run(host=settings.proxy_host, port=settings.proxy_port, app=app)

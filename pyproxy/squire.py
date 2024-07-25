@@ -2,7 +2,7 @@ import os
 import socket
 import sys
 from ipaddress import IPv4Address
-from typing import List
+from typing import Dict, List
 
 from pydantic import HttpUrl, PositiveInt, ValidationError
 from pydantic_core import InitErrorDetails
@@ -36,10 +36,10 @@ class Settings(BaseSettings):
     proxy_port: PositiveInt = 8000
     async_proxy: bool = False
 
-    # Hostname takes precendence to auto resolve IP address unless a client_url is provided
+    # Hostname takes precedence to auto resolve IP address unless a client_url is provided
     client_host: str | None = None
 
-    # IP address if known (less reliable in case of dyanmic IP addresses)
+    # IP address if known (less reliable in case of dynamic IP addresses)
     client_ip: str | IPv4Address | None = None
 
     # Port number for the client service
@@ -48,7 +48,14 @@ class Settings(BaseSettings):
     # Client URL will be constructed based on the information above
     client_url: HttpUrl | None = None
 
-    allowed_methods: List[AllowedMethods] = [AllowedMethods.get, AllowedMethods.post]
+    allowed_origins: List[str] | str = "*"
+    allowed_headers: List[str] | str = "*"
+    allowed_methods: List[AllowedMethods] | str = [
+        AllowedMethods.get,
+        AllowedMethods.post,
+    ]
+    remove_headers: List[str] = []
+    add_headers: List[Dict[str, str]] = [{}]
 
     class Config:
         """Config for env vars."""
@@ -62,25 +69,20 @@ class Settings(BaseSettings):
 validation_errors = []
 
 settings = Settings()
-if settings.client_url:
-    settings.client_url = str(settings.client_url).rstrip("/")
-else:
+if not settings.client_url:
+    errors = []
     if not settings.client_port:
-        raise ValidationError.from_exception_data(
-            title="client_port",
-            line_errors=[
-                InitErrorDetails(
-                    type="int_type",
-                    loc=("client_port",),
-                    input="missing",
-                )
-            ],
+        errors.append(
+            InitErrorDetails(
+                type="int_type",
+                loc=("client_port",),
+                input="missing",
+            )
         )
 
     if not any((settings.client_ip, settings.client_host)):
-        raise ValidationError.from_exception_data(
-            title="value_error",
-            line_errors=[
+        errors.extend(
+            [
                 InitErrorDetails(
                     type="string_type",
                     loc=("client_ip",),
@@ -91,17 +93,20 @@ else:
                     loc=("client_host",),
                     input="missing",
                 ),
-            ],
+            ]
         )
+
+    if errors:
+        raise ValidationError.from_exception_data(title="PyProxy", line_errors=errors)
 
     if settings.client_host:
         settings.client_ip = socket.gethostbyname(settings.client_host)
 
     if settings.client_ip:
-        settings.client_url = str(
-            HttpUrl(f"http://{settings.client_ip}:{settings.client_port}")
-        ).rstrip("/")
+        settings.client_url = HttpUrl(
+            f"http://{settings.client_ip}:{settings.client_port}"
+        )
     else:
-        settings.client_url = str(
-            HttpUrl(f"http://{settings.client_host}:{settings.client_port}")
-        ).rstrip("/")
+        settings.client_url = HttpUrl(
+            f"http://{settings.client_host}:{settings.client_port}"
+        )
