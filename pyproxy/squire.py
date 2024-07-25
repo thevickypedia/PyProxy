@@ -1,13 +1,12 @@
 import os
 import socket
-from ipaddress import IPv4Address
 import sys
+from ipaddress import IPv4Address
 from typing import List
 
 from pydantic import HttpUrl, PositiveInt, ValidationError
 from pydantic_core import InitErrorDetails
 from pydantic_settings import BaseSettings
-
 
 if sys.version_info.minor > 10:
     from enum import StrEnum
@@ -19,6 +18,8 @@ else:
 
 
 class AllowedMethods(StrEnum):
+    """Enum for HTTP methods."""
+
     get: str = "GET"
     put: str = "PUT"
     post: str = "POST"
@@ -33,7 +34,6 @@ class Settings(BaseSettings):
 
     proxy_host: str = socket.gethostbyname("localhost")
     proxy_port: PositiveInt = 8000
-    workers: PositiveInt = int(os.cpu_count() / 2)
 
     # Hostname takes precendence to auto resolve IP address unless a client_url is provided
     client_host: str | None = None
@@ -62,7 +62,7 @@ validation_errors = []
 
 settings = Settings()
 if settings.client_url:
-    settings.client_url = str(settings.client_url)
+    settings.client_url = str(settings.client_url).rstrip("/")
 else:
     if not settings.client_port:
         raise ValidationError.from_exception_data(
@@ -99,8 +99,8 @@ else:
     if settings.client_ip:
         settings.client_url = str(
             HttpUrl(f"http://{settings.client_ip}:{settings.client_port}")
-        )
+        ).rstrip("/")
     else:
         settings.client_url = str(
             HttpUrl(f"http://{settings.client_host}:{settings.client_port}")
-        )
+        ).rstrip("/")

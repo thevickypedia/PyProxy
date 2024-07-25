@@ -1,3 +1,3 @@
-version = "0.0.0-a"
+from .main import main  # noqa: F401
 
-from .main import main
+version = "0.0.0-a"

@@ -4,8 +4,8 @@ from http import HTTPStatus
 
 import httpx
 import uvicorn
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 
 from pyproxy.squire import settings
@@ -18,11 +18,10 @@ CLIENT = httpx.Client()  # Create re-usable client object
 async def lifespan(app: FastAPI):
     """Lifespan function to handle startup and shutdown events."""
     LOGGER.info(
-        "Tunneling http://%s:%d -> %s with %d workers",
+        "Tunneling http://%s:%d -> %s",
         settings.proxy_host,
         settings.proxy_port,
         settings.client_url,
-        settings.workers,
     )
     yield
     LOGGER.info("Stopped tunneling")
@@ -46,20 +45,20 @@ async def proxy(request: Request) -> Response:
             headers=dict(request.headers),
             cookies=request.cookies,
             params=dict(request.query_params),
-            data=body.decode(),
+            data=body,
+            follow_redirects=True,
         )
-
-        # If the response content-type is text/html, we need to rewrite links in it
-        content_type = response.headers.get("content-type", "")
-        if "text/html" in content_type:
+        headers = response.headers.copy()
+        content_type = headers.get("content-type", "")
+        if "text" in content_type:
             content = response.text
-            # Modify content if necessary (e.g., rewriting links)
-            # content = modify_html_links(content)
         else:
             content = response.content
-        response.headers.pop("content-encoding", None)
-
-        return Response(content, response.status_code, response.headers, content_type)
+        # headers.pop("host", None)
+        # headers.pop("content-length", None)
+        # headers.pop("accept-encoding", None)
+        # headers.pop("content-encoding", None)
+        return Response(content, response.status_code, headers, content_type)
     except httpx.RequestError as exc:
         LOGGER.error(exc)
         raise HTTPException(
@@ -75,10 +74,7 @@ def main():
     #   Take refresh_interval as an env var and default to 15 minutes
     #       Do this only if it was constructed by PyProxy
     #   Include file logger
-    app=FastAPI(
-            host=settings.proxy_host,
-            port=settings.proxy_port,
-            workers=settings.workers,
+    app = FastAPI(
         routes=[
             APIRoute(
                 "/{_:path}",
@@ -88,6 +84,7 @@ def main():
         ],
         lifespan=lifespan,
     )
+    # noinspection PyTypeChecker
     app.add_middleware(
         CORSMiddleware,
         allow_origins="*",  # todo: restrict if need be
@@ -96,8 +93,4 @@ def main():
         allow_headers="*",  # todo: restrict if need be
         max_age=300,  # maximum time in seconds for browsers to cache CORS responses
     )
-    uvicorn.run(
-        host=settings.proxy_host,
-        port=settings.proxy_port,
-        app=app
-    )
+    uvicorn.run(host=settings.proxy_host, port=settings.proxy_port, app=app)
