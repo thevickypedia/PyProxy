@@ -3,7 +3,8 @@ from contextlib import asynccontextmanager
 from http import HTTPStatus
 
 import httpx
-import uvicorn.logging
+import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.routing import APIRoute
 
@@ -74,18 +75,29 @@ def main():
     #   Take refresh_interval as an env var and default to 15 minutes
     #       Do this only if it was constructed by PyProxy
     #   Include file logger
-    uvicorn.run(
-        app=FastAPI(
+    app=FastAPI(
             host=settings.proxy_host,
             port=settings.proxy_port,
             workers=settings.workers,
-            routes=[
-                APIRoute(
-                    "/{_:path}",
-                    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-                    endpoint=proxy,
-                )
-            ],
-            lifespan=lifespan,
-        )
+        routes=[
+            APIRoute(
+                "/{_:path}",
+                methods=settings.allowed_methods,
+                endpoint=proxy,
+            )
+        ],
+        lifespan=lifespan,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins="*",  # todo: restrict if need be
+        allow_credentials=True,
+        allow_methods=settings.allowed_methods,
+        allow_headers="*",  # todo: restrict if need be
+        max_age=300,  # maximum time in seconds for browsers to cache CORS responses
+    )
+    uvicorn.run(
+        host=settings.proxy_host,
+        port=settings.proxy_port,
+        app=app
     )

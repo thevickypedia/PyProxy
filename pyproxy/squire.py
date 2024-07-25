@@ -1,10 +1,31 @@
 import os
 import socket
 from ipaddress import IPv4Address
+import sys
+from typing import List
 
 from pydantic import HttpUrl, PositiveInt, ValidationError
 from pydantic_core import InitErrorDetails
 from pydantic_settings import BaseSettings
+
+
+if sys.version_info.minor > 10:
+    from enum import StrEnum
+else:
+    from enum import Enum
+
+    class StrEnum(str, Enum):
+        """Override for python 3.10 due to lack of StrEnum."""
+
+
+class AllowedMethods(StrEnum):
+    get: str = "GET"
+    put: str = "PUT"
+    post: str = "POST"
+    head: str = "HEAD"
+    patch: str = "PATCH"
+    delete: str = "DELETE"
+    options: str = "OPTIONS"
 
 
 class Settings(BaseSettings):
@@ -25,6 +46,8 @@ class Settings(BaseSettings):
 
     # Client URL will be constructed based on the information above
     client_url: HttpUrl | None = None
+
+    allowed_methods: List[AllowedMethods] = [AllowedMethods.get, AllowedMethods.post]
 
     class Config:
         """Config for env vars."""
