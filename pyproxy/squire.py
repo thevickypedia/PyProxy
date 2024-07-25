@@ -34,6 +34,7 @@ class Settings(BaseSettings):
 
     proxy_host: str = socket.gethostbyname("localhost")
     proxy_port: PositiveInt = 8000
+    async_proxy: bool = False
 
     # Hostname takes precendence to auto resolve IP address unless a client_url is provided
     client_host: str | None = None

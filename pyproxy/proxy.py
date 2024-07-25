@@ -8,26 +8,31 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 
+from pyproxy.postman import async_manager, sync_manager
 from pyproxy.squire import settings
 
 LOGGER = logging.getLogger("uvicorn.error")
-CLIENT = httpx.Client()  # Create re-usable client object
+if settings.async_proxy:
+    HANDLER = async_manager
+else:
+    HANDLER = sync_manager
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_: FastAPI):
     """Lifespan function to handle startup and shutdown events."""
     LOGGER.info(
-        "Tunneling http://%s:%d -> %s",
+        "Tunneling http://%s:%d → %s, async_proxy: %s",
         settings.proxy_host,
         settings.proxy_port,
         settings.client_url,
+        settings.async_proxy,
     )
     yield
     LOGGER.info("Stopped tunneling")
 
 
-async def proxy(request: Request) -> Response:
+async def engine(request: Request) -> Response:
     """Proxy handler function to forward incoming requests to a target URL.
 
     Args:
@@ -37,17 +42,16 @@ async def proxy(request: Request) -> Response:
         Response: The response object with the forwarded content and headers.
     """
     try:
-        body = await request.body()
-        # noinspection PyTypeChecker
-        response = CLIENT.request(
+        payload = dict(
             method=request.method,
             url=settings.client_url + request.url.path,
             headers=dict(request.headers),
             cookies=request.cookies,
             params=dict(request.query_params),
-            data=body,
+            data=await request.body(),
             follow_redirects=True,
         )
+        response = await HANDLER(payload)
         headers = response.headers.copy()
         content_type = headers.get("content-type", "")
         if "text" in content_type:
@@ -67,7 +71,7 @@ async def proxy(request: Request) -> Response:
         )
 
 
-def main():
+def run():
     """Server handler."""
     # todo:
     #   Include a repeated timer to update the client_url
@@ -79,7 +83,7 @@ def main():
             APIRoute(
                 "/{_:path}",
                 methods=settings.allowed_methods,
-                endpoint=proxy,
+                endpoint=engine,
             )
         ],
         lifespan=lifespan,
