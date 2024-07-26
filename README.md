@@ -1,6 +1,31 @@
 # PyProxy
 High speed proxy engine to serve light weight content
 
+## Environment Variables
+Env vars can either be loaded from `.env` files.
+
+<details>
+<summary><strong>Env Requirements</strong></summary>
+
+- **proxy_host** `str` - Hostname/IP for the proxy server. _Defaults to `socket.gethostbyname('localhost')`_
+- **proxy_port** `int` - Port number for the proxy server. _Defaults to `8000`_
+- **async_proxy** `bool` - Enables asynchronous requests to the client. _Defaults to `False`_
+- **client_host** `str` - Hostname of the client server. _Defaults to `None`_
+- **client_ip** `IPv4Address` - IP address of the client server. _Defaults to `None`_
+- **client_port** `int` - Port number of the client server. _Defaults to `None`_
+- **client_url** `HttpUrl` - Direct URL to the client server. _Defaults to `None`_
+- **allowed_headers** `List[str]` - Headers to allow via CORS. _Defaults to `*`_
+- **allowed_origins** `List[str]` - Origins to allow connections through proxy server and CORS. _Defaults to `host`_
+- **allowed_methods** `List[str]` - HTTP methods to allow through proxy server. _Defaults to `["GET", "POST"]`_
+- **rate_limit** `Dict/List[Dict]` with the rate limit for the proxy server. _Defaults to `None`_
+- **remove_headers** `List[str]` - Client headers that has to be removed before rendering the response. 
+- **add_headers** `List[Dict[str, str]]` - Headers to be added before rendering the response.
+
+> `add_headers` and `remove_headers` are executed ONLY after the response is received from the client. This will NOT alter any transaction between `pyproxy` and the client.
+</details>
+
+<br>
+
 > PyProxy may increase an inconspicuous latency to the connections,
 > but due to asynchronous functionality, it is hardly noticeable.<br>
 > The proxy server is designed to be lightweight and efficient, however streaming large video files may increase
@@ -36,7 +61,7 @@ pre-commit run --all-files
 
 Licensed under the [MIT License][license]
 
-[license]: https://github.com/thevickypedia/pyfilebrowser/blob/main/LICENSE
+[license]: https://github.com/thevickypedia/pyproxy/blob/main/LICENSE
 [sphinx]: https://www.sphinx-doc.org/en/master/man/sphinx-autogen.html
 [google-docs]: https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings
 [pep8]: https://www.python.org/dev/peps/pep-0008/
