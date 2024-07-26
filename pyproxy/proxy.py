@@ -5,12 +5,13 @@ from urllib.parse import urljoin
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 
 from pyproxy.postman import async_manager, sync_manager
-from pyproxy.squire import settings
+from pyproxy.rate_limit import RateLimiter
+from pyproxy.squire import session, settings
 
 LOGGER = logging.getLogger("uvicorn.error")
 if settings.async_proxy:
@@ -42,6 +43,20 @@ async def engine(request: Request) -> Response:
     Returns:
         Response: The response object with the forwarded content and headers.
     """
+    # Since host header can be overridden, always check with base_url
+    if (
+        session.allowed_origins != "*"
+        and request.base_url.hostname not in session.allowed_origins
+    ):
+        LOGGER.warning(
+            "%s is blocked by firewall, since it is not set in allowed origins %s",
+            request.base_url,
+            session.allowed_origins,
+        )
+        raise HTTPException(
+            status_code=HTTPStatus.FORBIDDEN.value,
+            detail=f"{request.base_url!r} is not allowed",
+        )
     try:
         payload = dict(
             method=request.method,
@@ -77,16 +92,21 @@ async def engine(request: Request) -> Response:
 def run():
     """Server handler."""
     # todo:
-    #   Include rate limit
-    #   Include origin filter
     #   Include file logger
     settings.client_url = str(settings.client_url)
+
+    dependencies = []
+    for each_rate_limit in settings.rate_limit:
+        LOGGER.info("Adding rate limit: %s", each_rate_limit)
+        dependencies.append(Depends(dependency=RateLimiter(each_rate_limit).init))
+
     app = FastAPI(
         routes=[
             APIRoute(
-                "/{_:path}",
-                methods=settings.allowed_methods,
+                path="/{_:path}",
                 endpoint=engine,
+                methods=settings.allowed_methods,
+                dependencies=dependencies,
             )
         ],
         lifespan=lifespan,
